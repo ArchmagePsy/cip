@@ -19,13 +19,19 @@ class BasePipeline:
             else:
                 return self.jobs[name]
             
-    def run(self, context: Dict):
+    def run(self, context: Dict = {}):
         dependency_graph = {job: job.depends_on for job in self.jobs.values()}
 
         job_sorter = graphlib.TopologicalSorter(dependency_graph)
         job_execution_order = job_sorter.static_order()
 
-        results = {job: job.run(context) for job in job_execution_order}
+        context.update(PIPELINE=self)
+
+        def run_job(job):
+            context.update(JOB=job)
+            return job.run(context)
+
+        results = {job: run_job(job) for job in job_execution_order}
 
         return results
     
