@@ -1,0 +1,1 @@
+Cip is a simple package for writing continuous integration and deployment scripts in python
