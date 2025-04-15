@@ -6,6 +6,10 @@ class JobGroup:
     def __init__(self):
         self.jobs: Dict[str, BaseJob] = {}
 
+    def allow_fail(self, allowed: bool = True):
+        for job in self.jobs.values():
+            job.allow_fail(allowed)
+
 class BaseJob:
     def __init__(self, name: str, allowed_to_fail: bool = False):
         self.name = name
@@ -23,8 +27,8 @@ class BaseJob:
     def depends(self, *dependencies: List[Self | JobGroup]):
         self.depends_on = list(itertools.chain(*[dependency.jobs.values() if isinstance(dependency, JobGroup) else [dependency] for dependency in dependencies]))
 
-    def allow_fail(self, allow: bool = True):
-        self.allowed_to_fail = allow
+    def allow_fail(self, allowed: bool = True):
+        self.allowed_to_fail = allowed
 
     def run(self, context: Dict):
         if not all([context["RESULTS"][dependency] for dependency in self.depends_on]):
