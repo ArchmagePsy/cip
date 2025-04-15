@@ -26,13 +26,15 @@ class BasePipeline:
         job_sorter = graphlib.TopologicalSorter(dependency_graph)
         job_execution_order = job_sorter.static_order()
 
-        context.update(PIPELINE=self)
+        results = {}
+        context.update(PIPELINE=self, RESULTS=results)
 
         def run_job(job):
             context.update(JOB=job)
             return job.run(context)
 
-        results = {job: run_job(job) for job in job_execution_order}
+        for job in job_execution_order:
+            results[job] = run_job(job)
 
         return results
     
