@@ -1,6 +1,10 @@
 import functools
+import inspect
 from os import PathLike
+import os
+import shutil
 import subprocess
+import tempfile
 from typing import Callable, Dict, List
 
 
@@ -37,3 +41,27 @@ def shell(fail_fast: bool = True, executable: PathLike | None = None):
 
 def shell_default(step: Callable):
     return process(shell=True)(step)
+
+def script(shell_executable: PathLike):
+    def script_decorator(step: Callable):
+        script_text = inspect.getdoc(step)
+        script_text = f"#!{shell_executable}\n\n" + script_text
+
+        @functools.wraps(step)
+        def script_wrapper(context: Dict):
+            script_temp = tempfile.NamedTemporaryFile()
+            script_temp.write(script_text.encode())
+            script_temp.seek(0)
+            os.chmod(script_temp.name, 0o1700)
+            completed_process: subprocess.CompletedProcess = subprocess.run(f"{script_temp.name}", shell=True, executable=shell_executable)
+            return completed_process.returncode == 0
+        
+        return script_wrapper
+    
+    return script_decorator
+
+def bash(step: Callable):
+    return script("/bin/bash")(step)
+
+def sh(step: Callable):
+    return script("/bin/sh")(step)
