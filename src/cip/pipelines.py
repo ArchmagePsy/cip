@@ -1,3 +1,4 @@
+import asyncio
 import graphlib
 import itertools
 from typing import Dict
@@ -24,7 +25,6 @@ class BasePipeline:
         dependency_graph = {job: job.depends_on for job in itertools.chain(*[stage.jobs.values() for stage in self.stages.values()])}
 
         job_sorter = graphlib.TopologicalSorter(dependency_graph)
-        job_execution_order = job_sorter.static_order()
 
         results = {}
         context.update(PIPELINE=self)
@@ -33,8 +33,13 @@ class BasePipeline:
             context.update(JOB=job, RESULTS=results)
             return job.run(context)
 
-        for job in job_execution_order:
-            results[job] = run_job(job)
+        job_sorter.prepare()
+
+        while job_sorter.is_active():
+            jobs = job_sorter.get_ready()
+            for job in jobs:
+                results[job] = run_job(job)
+                job_sorter.done(job)
 
         return results
     
@@ -43,3 +48,40 @@ class BasePipeline:
     
 class Pipeline(BasePipeline):
     pass
+
+class AsyncPipeline(BasePipeline):
+    async def run(self, context: Dict = {}, workers: int = 2):
+        dependency_graph = {job: job.depends_on for job in itertools.chain(*[stage.jobs.values() for stage in self.stages.values()])}
+
+        job_sorter = graphlib.TopologicalSorter(dependency_graph)
+        job_queue = asyncio.Queue()
+
+        results = {}
+        context.update(PIPELINE=self)
+
+        def run_job(job):
+            local_context = context.copy()
+            local_context.update(JOB=job, RESULTS=results)
+            return job.run(local_context)
+        
+        def populate_queue():
+            for job in job_sorter.get_ready():
+                job_queue.put_nowait(job)
+        
+        async def run_jobs():
+            while job_sorter.is_active():
+                try:
+                    job = job_queue.get_nowait()
+                    results[job] = await asyncio.to_thread(run_job, job)
+                    job_sorter.done(job)
+                    job_queue.task_done()
+                    populate_queue()
+                except asyncio.QueueEmpty:
+                    await asyncio.sleep(0)
+
+        job_sorter.prepare()
+
+        populate_queue()
+        await asyncio.gather(*[asyncio.create_task(run_jobs()) for _ in range(workers)])
+
+        return results
