@@ -27,16 +27,19 @@ class BasePipeline:
         job_execution_order = job_sorter.static_order()
 
         results = {}
-        context.update(PIPELINE=self, RESULTS=results)
+        context.update(PIPELINE=self)
 
         def run_job(job):
-            context.update(JOB=job)
+            context.update(JOB=job, RESULTS=results)
             return job.run(context)
 
         for job in job_execution_order:
             results[job] = run_job(job)
 
         return results
+    
+    def __repr__(self):
+        return f"Pipeline({", ".join(self.stages.keys())})"
     
 class Pipeline(BasePipeline):
     pass
