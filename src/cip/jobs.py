@@ -33,7 +33,7 @@ class BaseJob:
         self.allowed_to_fail = allowed
 
     def run(self, context: Dict):
-        if not all([context["RESULTS"][dependency] for dependency in self.depends_on]):
+        if not all([context["RESULTS"].get(dependency, False) for dependency in self.depends_on]):
             return None
 
         for step in self.steps:
