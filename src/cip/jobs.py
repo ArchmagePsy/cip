@@ -38,8 +38,8 @@ class BaseJob:
 
         for step in self.steps:
             context.update(STEP=step.__name__)
-            if not step(context) and not self.allowed_to_fail:
-                return False
+            if not step(context):
+                return self.allowed_to_fail
         
         return True
     
