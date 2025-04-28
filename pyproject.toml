@@ -6,6 +6,14 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
+[project.optional-dependencies]
+client = [
+    "cip-client",
+]
+server = [
+    "cip-server",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
@@ -14,4 +22,10 @@ python_functions = "test_*"
 [tool.uv.workspace]
 members = [
     "packages/cip-core",
+    "packages/cip-server",
+    "packages/cip-client",
 ]
+
+[tool.uv.sources]
+cip-client = { workspace = true }
+cip-server = { workspace = true }

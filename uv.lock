@@ -5,13 +5,41 @@ requires-python = ">=3.12"
 [manifest]
 members = [
     "cip",
+    "cip-client",
     "cip-core",
+    "cip-server",
 ]
 
 [[package]]
 name = "cip"
 version = "0.1.0"
 source = { virtual = "." }
+
+[package.optional-dependencies]
+client = [
+    { name = "cip-client" },
+]
+server = [
+    { name = "cip-server" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cip-client", marker = "extra == 'client'", editable = "packages/cip-client" },
+    { name = "cip-server", marker = "extra == 'server'", editable = "packages/cip-server" },
+]
+provides-extras = ["client", "server"]
+
+[[package]]
+name = "cip-client"
+version = "0.1.0"
+source = { editable = "packages/cip-client" }
+dependencies = [
+    { name = "cip-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "cip-core", editable = "packages/cip-core" }]
 
 [[package]]
 name = "cip-core"
@@ -27,6 +55,17 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8.3.5" }]
+
+[[package]]
+name = "cip-server"
+version = "0.1.0"
+source = { editable = "packages/cip-server" }
+dependencies = [
+    { name = "cip-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "cip-core", editable = "packages/cip-core" }]
 
 [[package]]
 name = "colorama"
