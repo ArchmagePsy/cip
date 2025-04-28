@@ -26,8 +26,9 @@ def process(fail_fast: bool = True, shell: bool = False, executable: PathLike | 
         def process_wrapper(context: Dict):
             nonlocal environment
             try:
-                environment.update(**dict(map(lambda item: (item[0], repr(item[1])), context.items())))
-                return result and step(process_patch, context)
+                environment.update(**dict(map(lambda item: (item[0], str(item[1])), context.items())))
+                step_result = step(process_patch, context)
+                return result and (step_result or step_result is None)
             except subprocess.CalledProcessError:
                 return False
             
@@ -52,7 +53,7 @@ def script(interpreter: PathLike):
 
         @functools.wraps(step)
         def script_wrapper(context: Dict):
-            environment.update(**dict(map(lambda item: (item[0], repr(item[1])), context.items())))
+            environment.update(**dict(map(lambda item: (item[0], str(item[1])), context.items())))
             script_temp = tempfile.NamedTemporaryFile()
             script_temp.write(script_text.encode())
             script_temp.seek(0)
