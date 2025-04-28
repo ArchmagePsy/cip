@@ -1,5 +1,5 @@
 from typing import Dict
-from cip.utils import tools
+from cip_core.utils import tools
 
 
 # these tests will only work on unix systems

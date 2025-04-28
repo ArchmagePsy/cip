@@ -3,7 +3,7 @@ import graphlib
 import itertools
 from typing import Dict
 
-from cip.stages import Stage
+from cip_core.stages import Stage
 
 
 class BasePipeline:

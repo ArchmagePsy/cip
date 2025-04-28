@@ -1,6 +1,6 @@
 import asyncio
 from typing import Dict
-from cip import pipelines, stages
+from cip_core import pipelines, stages
 
 
 def test_pipeline_attribute():

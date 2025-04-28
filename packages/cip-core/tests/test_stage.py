@@ -1,4 +1,4 @@
-from cip import stages, jobs
+from cip_core import stages, jobs
 
 def test_stage_attribute():
     dummy_stage = stages.Stage("dummy")

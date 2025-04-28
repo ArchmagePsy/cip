@@ -1,4 +1,4 @@
-from cip import jobs
+from cip_core import jobs
 
 def test_job_allow_fail():
     dummy_job_1 = jobs.Job("dummy_1")

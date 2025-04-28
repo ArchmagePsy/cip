@@ -2,10 +2,21 @@ version = 1
 revision = 1
 requires-python = ">=3.12"
 
+[manifest]
+members = [
+    "cip",
+    "cip-core",
+]
+
 [[package]]
 name = "cip"
 version = "0.1.0"
 source = { virtual = "." }
+
+[[package]]
+name = "cip-core"
+version = "0.1.0"
+source = { editable = "packages/cip-core" }
 
 [package.dev-dependencies]
 dev = [

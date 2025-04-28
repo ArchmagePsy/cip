@@ -1,4 +1,4 @@
-from cip.jobs import Job, JobGroup
+from cip_core.jobs import Job, JobGroup
 
 
 class Stage(JobGroup):

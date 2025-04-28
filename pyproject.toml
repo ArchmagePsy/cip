@@ -6,12 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
-[dependency-groups]
-dev = [
-    "pytest>=8.3.5",
-]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
+
+[tool.uv.workspace]
+members = [
+    "packages/cip-core",
+]
