@@ -8,7 +8,14 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "asyncpg>=0.30.0",
     "cip-core",
+    "fastapi>=0.115.12",
+    "gitpython>=3.1.44",
+    "grpcio>=1.71.0",
+    "psycopg2-binary>=2.9.10",
+    "redis>=6.1.0",
+    "sqlalchemy>=2.0.41",
 ]
 
 [build-system]
@@ -17,3 +24,9 @@ build-backend = "hatchling.build"
 
 [tool.uv.sources]
 cip-core = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "alembic>=1.16.1",
+    "grpcio-tools>=1.71.0",
+]

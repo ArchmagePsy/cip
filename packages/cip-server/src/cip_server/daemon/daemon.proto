@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package daemon;
+
+/*
+The pipeline execution daemon is a background process that orchestrates the execution of project pipelines by
+recieving requests through the PipelineExecutor service. The daemon manages a pool of processes that execute
+the pipelines in isolated processes and temporary directories.
+*/
+service PipelineExecutor {
+    rpc ExecutePipeline (PipelineExecutionRequest) returns (PipelineExecutionResponse); // this method triggers the main body of work for the Pipeline Execuion Daemon
+    rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse); // this method is used to check that the daemon is up and running 
+}
+
+/*
+The central request for most daemon activity. Given a repository url and a commit hash
+the daemon will checkout the project into a temporary directory and run the pipeline it
+finds there.
+*/
+message PipelineExecutionRequest {
+    string git_url = 1;// the url of the git repository
+    string commit_hash = 2;// the hash for the commit to checkout on the repository
+}
+
+message PipelineExecutionResponse {
+    string pipeline_execution_id = 1;// returns the UUID of the new pipeline execution
+}
+
+// an empty request, performs a health check
+message HealthCheckRequest {
+    
+}
+
+message HealthCheckResponse {
+    
+}

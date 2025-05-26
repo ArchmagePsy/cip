@@ -1,0 +1,2 @@
+class CIPServerException(Exception):
+    pass
