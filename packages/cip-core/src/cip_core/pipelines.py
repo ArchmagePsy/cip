@@ -3,7 +3,7 @@ This module defines the main entrypoint for any CI?CD process in cip - the pipel
 complex units of work that need to be performed as part of integration or deployment. The pipeline ensures that these jobs are all run in order based 
 on their dependencies and tracks their status.
 """
-import asyncio
+from concurrent.futures import Future, ThreadPoolExecutor
 import graphlib
 import itertools
 from typing import Dict
@@ -87,15 +87,15 @@ class Pipeline(BasePipeline):
     """
     pass
 
-class AsyncPipeline(BasePipeline):
+class ConcurrentPipeline(BasePipeline):
     """
-    This class is an asynchronous version of the pipeline that executes jobs on separate threads so that multiple jobs can be executed
+    This class is an concurrent version of the pipeline that executes jobs on separate threads so that multiple jobs can be executed
     in parrallel potentially speeding up the runtime of the pipeline. Job dependencies are still maintained such that the workers will
     be blocked whilst no jobs with completed dependencies are available.
     """
-    async def run(self, context: Dict = {}, workers: int = 2):
+    def run(self, context: Dict = {}, workers: int = 2):
         """
-        The execution method for the asynchronous pipeline. Jobs are executed asynchronously whilst maintaining the dependency contraints.
+        The execution method for the concurrent pipeline. Jobs are executed in parrallel whilst maintaining the dependency contraints.
         Contexts are isolated per job so that no unpredicted behaviour should occur where two jobs race to modify a piece of metadata.
 
         Args:
@@ -104,7 +104,7 @@ class AsyncPipeline(BasePipeline):
                 added it can be done here. Copies of the context will be created each time a job runs to avoid race conditions and other
                 unexpected behviour.
 
-            workers(int): the number of asynchronous workers for this pipeline to use.
+            workers(int): the number of cocurrent workers for this pipeline to use.
 
         Returns:
             Dict[BaseJob, bool]: the results of the different jobs in the pipeline, particularly whether or not they failed.
@@ -112,7 +112,6 @@ class AsyncPipeline(BasePipeline):
         dependency_graph = {job: job.depends_on for job in itertools.chain(*[stage.jobs.values() for stage in self.stages.values()])}
 
         job_sorter = graphlib.TopologicalSorter(dependency_graph)
-        job_queue = asyncio.Queue()
 
         results = {}
         context.update(PIPELINE=self)
@@ -122,24 +121,16 @@ class AsyncPipeline(BasePipeline):
             local_context.update(JOB=job, RESULTS=results)
             return job.run(local_context)
         
-        def populate_queue():
-            for job in job_sorter.get_ready():
-                job_queue.put_nowait(job)
-        
-        async def run_jobs():
-            while job_sorter.is_active():
-                try:
-                    job = job_queue.get_nowait()
-                    results[job] = await asyncio.to_thread(run_job, job)
-                    job_sorter.done(job)
-                    job_queue.task_done()
-                    populate_queue()
-                except asyncio.QueueEmpty:
-                    await asyncio.sleep(0)
-
         job_sorter.prepare()
 
-        populate_queue()
-        await asyncio.gather(*[asyncio.create_task(run_jobs()) for _ in range(workers)])
+        with ThreadPoolExecutor(max_workers=workers) as thread_pool:
+            while job_sorter.is_active():
+                for job in job_sorter.get_ready():
+                    job_future = thread_pool.submit(run_job, job)
+                    @job_future.add_done_callback
+                    def __publish_and_cleanup(job_future: Future):
+                        job_result = job_future.result()
+                        results[job] = job_result
+                        job_sorter.done(job)
 
         return results

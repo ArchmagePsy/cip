@@ -1,4 +1,3 @@
-import asyncio
 from typing import Dict
 from cip_core import pipelines, stages
 
@@ -46,8 +45,8 @@ def test_pipeline_run():
 
     dummy_pipeline.run()
 
-def test_pipeline_run_async():
-    dummy_pipeline = pipelines.AsyncPipeline()
+def test_pipeline_run_concurrent():
+    dummy_pipeline = pipelines.ConcurrentPipeline()
 
     @dummy_pipeline.stage2.job1.step
     def step4(context: Dict):
@@ -75,4 +74,4 @@ def test_pipeline_run_async():
     # this prevents race condition between job1 and job2 in stage1
     dummy_pipeline.stage1.job2.depends(dummy_pipeline.stage1.job1)
 
-    asyncio.run(dummy_pipeline.run())
+    dummy_pipeline.run()
