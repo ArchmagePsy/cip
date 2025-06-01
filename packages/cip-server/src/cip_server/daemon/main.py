@@ -1,31 +1,34 @@
-from concurrent.futures import CancelledError, Future, ProcessPoolExecutor
 import argparse
+import asyncio
+import atexit
 import logging
 import os
 import runpy
 import signal
-import asyncio
 import tempfile
 import tomllib
-from typing import Dict
 import uuid
+from concurrent.futures import CancelledError, Future, ProcessPoolExecutor
+from typing import Dict
 
+import grpc
 from cip_core.pipelines import BasePipeline
-from cip_server.daemon.daemon_pb2 import PipelineExecutionResponse, HealthCheckResponse
 from cip_server.daemon import daemon_pb2_grpc
+from cip_server.daemon.daemon_pb2 import PipelineExecutionResponse
 from cip_server.daemon.daemon_pb2_grpc import PipelineExecutorServicer
 from cip_server.models.pipelines import PipelineExecution, PipelineStatus
 from cip_server.models.results import JobResult
 from cip_server.utils.errors import CIPServerException
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from git import Repo
-import grpc
+from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 
 logging.basicConfig()
 logger = logging.getLogger("PIPELINE EXECUTION DAEMON")
+
+worker_session_factory = None
 
 def checkout_project(git_url: str, commit_hash: str, to_path: os.PathLike):
     logger.debug(f"Cloning project {git_url} to {to_path}")
@@ -48,32 +51,46 @@ def find_pipeline(project_path: os.PathLike, config_path: os.PathLike):
 
     return pipeline, context
 
-def execute_pipeline(connection_url: str, pipeline_id: uuid.UUID):
-    try:
-        db_engine = create_engine(connection_url)
-        session_factory = sessionmaker(db_engine)
-
-        with session_factory() as session:
+def execute_pipeline(pipeline_id: uuid.UUID):
+        if worker_session_factory is None: 
+            raise CIPServerException("No database session factory was found")
+        
+        with worker_session_factory() as session:
 
             pipeline_execution = session.get(PipelineExecution, pipeline_id)
 
             with tempfile.TemporaryDirectory(prefix="pipeline_", suffix=f"_{pipeline_execution.commit_hash}") as pipeline_temp_dir:
-                logger.debug(f"Temporary directory {pipeline_temp_dir} created")
-                logger.info("Checking out project")
-                clone_repo = checkout_project(pipeline_execution.git_url, pipeline_execution.commit_hash, pipeline_temp_dir)
-                logger.info("Looking for pipeline")
-                pipeline, context = find_pipeline(clone_repo.working_tree_dir, "cip.toml")
-                
-                if pipeline is None:
-                    raise CIPServerException(f"No pipeline found in {pipeline_execution.git_url} project")
-                
-                logger.debug(f"Switching to project directory {clone_repo.working_tree_dir}")
-                os.chdir(clone_repo.working_tree_dir)
-                update_pipeline_status(session, pipeline_execution, PipelineStatus.RUNNING)
-                logger.info("Executing pipeline")
-                return {job.name: result for job, result in pipeline.run(context).items()}
-    finally:
+                checkpoint_cwd = os.getcwd()
+                try:
+                    logger.debug(f"Temporary directory {pipeline_temp_dir} created")
+                    logger.info("Checking out project")
+                    clone_repo = checkout_project(pipeline_execution.git_url, pipeline_execution.commit_hash, pipeline_temp_dir)
+                    logger.info("Looking for pipeline")
+                    pipeline, context = find_pipeline(clone_repo.working_tree_dir, "cip.toml")
+                    
+                    if pipeline is None:
+                        raise CIPServerException(f"No pipeline found in {pipeline_execution.git_url} project")
+                    
+                    logger.debug(f"Switching to project directory {clone_repo.working_tree_dir}")
+                    
+                    os.chdir(clone_repo.working_tree_dir)
+                    update_pipeline_status(session, pipeline_execution, PipelineStatus.RUNNING)
+                    logger.info("Executing pipeline")
+                    pipeline_results = {job.name: result for job, result in pipeline.run(context).items()}
+                    return pipeline_results
+                finally:
+                    os.chdir(checkpoint_cwd)
+                    clone_repo.close()
+
+def init_worker(connection_url: str):
+    global worker_session_factory
+    db_engine = create_engine(connection_url)
+    worker_session_factory = sessionmaker(db_engine)
+
+    def __dispose_db_engine():
         db_engine.dispose()
+
+    atexit.register(__dispose_db_engine)
     
 def update_pipeline_status(session, pipeline_execution: PipelineExecution, status: PipelineStatus):
     pipeline_execution.status = status
@@ -105,7 +122,7 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
                     port: int = 3916, 
                     workers: int = 4):
         super().__init__()
-        self.__process_pool = ProcessPoolExecutor(max_workers=workers)
+        
         self.host = host
         self.port = port
         self.database_host = database_host
@@ -114,9 +131,11 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
         self.database_password = database_password
         self.database_name = database_name
         self.database_connection_suffix = f"{self.database_user}:{self.database_password}@{self.database_host}:{self.database_port}/{self.database_name}"
+        self.process_pool = ProcessPoolExecutor(max_workers=workers, initializer=init_worker, initargs=(f"postgresql+psycopg2://{self.database_connection_suffix}",))
         self.async_db_engine = create_async_engine(f"postgresql+asyncpg://{self.database_connection_suffix}")
         self.async_session_factory = sessionmaker(bind=self.async_db_engine, expire_on_commit=False, class_=AsyncSession)
         logger.info("Database engine created")
+        self.shutdown = asyncio.Event()
 
     async def ExecutePipeline(self, request, context):
         logger.info("Receiving pipeline execution request")
@@ -128,9 +147,8 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
         
         pipeline_id = pipeline_execution.id    
         logger.info(f"Created pipeline execution {pipeline_id}")
-        pipeline_execution_future = self.__process_pool.submit(execute_pipeline, f"postgresql+psycopg2://{self.database_connection_suffix}", pipeline_id)
+        pipeline_execution_future = self.process_pool.submit(execute_pipeline, pipeline_id)
         
-        @pipeline_execution_future.add_done_callback
         def __publish_and_cleanup(future: Future[Dict]):
             db_engine = create_engine(f"postgresql+psycopg2://{self.database_connection_suffix}")
             session_factory = sessionmaker(db_engine)
@@ -146,19 +164,20 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
                     publish_pipeline_result(session, pipeline_execution, status=PipelineStatus.CANCELLED)
                     logger.info(f"Cancelled pipeline {pipeline_id}")
                 except Exception as ex:
-                    publish_pipeline_result(session, pipeline_execution, status=PipelineStatus.ERROR, error=str(ex))
+                    publish_pipeline_result(session, pipeline_execution, status=PipelineStatus.ERROR, error=repr(ex))
                     logger.error(f"Error executing pipeline {pipeline_id}", exc_info=True)
-
-            db_engine.dispose()
+                finally:
+                    db_engine.dispose()
+        
+        pipeline_execution_future.add_done_callback(__publish_and_cleanup)
         
         return PipelineExecutionResponse(pipeline_execution_id=str(pipeline_id))
 
     async def __main(self):
         logger.info("Starting Pipeline Execution Daemon")
-        shutdown = asyncio.Event()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, shutdown.set)
+            loop.add_signal_handler(sig, self.stop)
 
         server = grpc.aio.server()
         daemon_pb2_grpc.add_PipelineExecutorServicer_to_server(self, server)
@@ -167,12 +186,12 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
         logger.info("Starting async server for RPC")
         await server.start()
 
-        await shutdown.wait()
+        await self.shutdown.wait()
 
         logger.info("Shutting down server")
         await server.stop(grace=5)
         
-        self.__process_pool.shutdown(cancel_futures=True)
+        self.process_pool.shutdown(cancel_futures=True)
         logger.info("Process pool shutdown")
         
         await self.async_db_engine.dispose()
@@ -180,6 +199,9 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
 
     def start(self):
         asyncio.run(self.__main())
+
+    def stop(self):
+        self.shutdown.set()
 
 
 if __name__ == "__main__":
