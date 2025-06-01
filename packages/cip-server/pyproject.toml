@@ -29,4 +29,6 @@ cip-core = { workspace = true }
 dev = [
     "alembic>=1.16.1",
     "grpcio-tools>=1.71.0",
+    "pytest>=8.3.5",
+    "testcontainers>=4.10.0",
 ]
