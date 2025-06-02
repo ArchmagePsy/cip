@@ -61,6 +61,7 @@ def execute_pipeline(pipeline_id: uuid.UUID):
 
             with tempfile.TemporaryDirectory(prefix="pipeline_", suffix=f"_{pipeline_execution.commit_hash}") as pipeline_temp_dir:
                 checkpoint_cwd = os.getcwd()
+                clone_repo = None
                 try:
                     logger.debug(f"Temporary directory {pipeline_temp_dir} created")
                     logger.info("Checking out project")
@@ -80,7 +81,8 @@ def execute_pipeline(pipeline_id: uuid.UUID):
                     return pipeline_results
                 finally:
                     os.chdir(checkpoint_cwd)
-                    clone_repo.close()
+                    if clone_repo is not None:
+                        clone_repo.close()
 
 def init_worker(connection_url: str):
     global worker_session_factory
