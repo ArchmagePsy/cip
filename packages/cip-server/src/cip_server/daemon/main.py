@@ -15,7 +15,7 @@ from cip_server.config import CipServerConfig
 import grpc
 from cip_core.pipelines import BasePipeline
 from cip_server.daemon import daemon_pb2_grpc
-from cip_server.daemon.daemon_pb2 import PipelineExecutionResponse
+from cip_server.daemon.daemon_pb2 import PipelineExecutionResponse, PipelineExecutionRequest
 from cip_server.daemon.daemon_pb2_grpc import PipelineExecutorServicer
 from cip_server.models.pipelines import PipelineExecution, PipelineStatus
 from cip_server.models.results import JobResult
@@ -32,6 +32,17 @@ logger = logging.getLogger("PIPELINE EXECUTION DAEMON")
 worker_session_factory = None
 
 def checkout_project(git_url: str, commit_hash: str, to_path: os.PathLike):
+    """
+    Clones a git repository into a directory and checks out a particular commit.
+
+    Args:
+        git_url(str): the url of the git repository, can be any type of path or url that the system's git installation supports
+        commit_hash(str): the hash of the commit to checkout on the repository
+        to_path(PathLike): the path to the directory to clone the remote repository into
+
+    Returns:
+        Repo: the repo object for the repository we just cloned
+    """
     logger.debug(f"Cloning project {git_url} to {to_path}")
     clone_repo = Repo.clone_from(git_url, to_path)
     logger.debug(F"Checking out commit {commit_hash} of {os.path.basename(clone_repo.working_tree_dir)} repository")
@@ -40,6 +51,20 @@ def checkout_project(git_url: str, commit_hash: str, to_path: os.PathLike):
     return clone_repo
 
 def find_pipeline(project_path: os.PathLike, config_path: os.PathLike):
+    """
+    Looks for a pipeline object in the project.
+
+    This method looks for a toml config file at the specified location from the project's root directory. It looks for the "pipeline-path" parameter
+    and runs the python program it points to (.cip.py if not specified) it then extracts the first pipeline object it finds and returns it.
+
+    Args:
+        project_path(PathLike): the path to the root of the project
+        config_path(PathLike): the path from the root of the project to the toml file containing the config
+
+    Returns:
+        BasePipeline: the pipeline object found, None if no pipeline object is found
+        Dict[str, Any]: the dictionary representing the config file that was parsed, to be used as the pipeline's context
+    """
     logger.debug(f"Loading CIP config from {os.path.basename(project_path)} project")
     with open(os.path.join(project_path, config_path), "rb") as config_file:
         config = tomllib.load(config_file)
@@ -53,6 +78,18 @@ def find_pipeline(project_path: os.PathLike, config_path: os.PathLike):
     return pipeline, context
 
 def execute_pipeline(pipeline_id: uuid.UUID):
+        """
+        Execute a pipeline.
+
+        This method is run by the worker processes and is responsible for creating a temporary directory to checkout the project to
+        then finding its pipeline and executing it all while updating its entry in the database.
+
+        Args:
+            pipeline_id(UUID): the id of the pipeline execution to process, the worker expects that this will already have been created
+        
+        Returns:
+            Dict[str, bool]: the results of the pipeline where each key is a job name and the value is True or False for pass or fail
+        """
         if worker_session_factory is None: 
             raise CipServerException("No database session factory was found")
         
@@ -86,6 +123,14 @@ def execute_pipeline(pipeline_id: uuid.UUID):
                         clone_repo.close()
 
 def init_worker(connection_url: str):
+    """
+    Used to initialize the worker processes.
+
+    Provides each worker process with a database engine and session factory that will cleanly be disposed of fowling its exit.
+
+    Args:
+        connection_url(str): the database connection url
+    """
     global worker_session_factory
     db_engine = create_engine(connection_url)
     worker_session_factory = sessionmaker(db_engine)
@@ -96,11 +141,29 @@ def init_worker(connection_url: str):
     atexit.register(__dispose_db_engine)
     
 def update_pipeline_status(session, pipeline_execution: PipelineExecution, status: PipelineStatus):
+    """
+    Update the status of a pipeline execution.
+
+    Args:
+        session: the sqlalchemy database session
+        pipeline_execution(PipelineExecution): the pipeline execution object
+        status(PipelineStatus): the status to update the pipeline execution to
+    """
     pipeline_execution.status = status
     session.commit()
     session.refresh(pipeline_execution)
     
 def publish_pipeline_result(session, pipeline_execution: PipelineExecution, results: Dict | None = None, status: PipelineStatus = PipelineStatus.FINISHED, error: str | None = None):
+    """
+    Publishes the job results of the pipeline execution.
+
+    Args:
+        session: the sqlalchemy database session
+        pipeline_execution(PipelineExecution): the pipeline execution object
+        results (Dict[str, bool]): a dictionary representing the results for the pipeline's jobs as key-value pairs of job name and result
+        status(PipelineStatus): the status to update the pipeline execution to
+        error(str): the error if any reported by this pipeline
+    """
     pipeline_execution.status = status
     if results:
         job_results = []
@@ -115,6 +178,9 @@ def publish_pipeline_result(session, pipeline_execution: PipelineExecution, resu
     session.refresh(pipeline_execution)    
     
 class PipelineExecutionDaemon(PipelineExecutorServicer):
+    """
+    This class is an implementation of the gRPC service for the pipeline execution daemon.
+    """
 
     def __init__(self, database_host: str = "127.0.0.1", 
                     database_port: int = 5432, 
@@ -124,6 +190,17 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
                     host: str = "127.0.0.1", 
                     port: int = 3916, 
                     workers: int = 4):
+        """
+        Args:
+            database_host(str): the host address of the postgres database
+            database_port(int): the port to connect to the postgres database on
+            database_user(str): the username to authenticate with the database as
+            database_password(str): the password for the user of the postgres database
+            database_name(str): the logical database name for the pipeline execution database
+            host(str): the interface address for the daemon to listen on for RPC
+            port(int): the port the daemon will bind to
+            workers(int): the number of worker processes to execute pipelines on
+        """
         super().__init__()
         
         self.host = host
@@ -140,7 +217,16 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
         logger.info("Database engine created")
         self.shutdown = asyncio.Event()
 
-    async def ExecutePipeline(self, request, context):
+    async def ExecutePipeline(self, request: PipelineExecutionRequest, context):
+        """
+        The remote procedure to run pipeline executions.
+
+        Args:
+            request(PipelineExecutionRequest): the RPC request with the repository details for the pipeline to execute
+
+        Returns:
+            PipelineExecutionResponse: the response to the pipeline execution request containing the uuid for the newly created pipeline execution
+        """
         logger.info("Receiving pipeline execution request")
         async with self.async_session_factory() as session:
             pipeline_execution = PipelineExecution(git_url = request.git_url, commit_hash = request.commit_hash)
@@ -201,9 +287,15 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
         logger.info("Database engine disposed")
 
     def start(self):
+        """
+        Start the pipeline execution daemon
+        """
         asyncio.run(self.__main())
 
     def stop(self):
+        """
+        Stop the pipeline execution daemon
+        """
         self.shutdown.set()
 
 
