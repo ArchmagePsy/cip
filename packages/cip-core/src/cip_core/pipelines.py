@@ -1,5 +1,5 @@
 """
-This module defines the main entrypoint for any CI?CD process in cip - the pipeline. A pipeline is a collection of stages, groupings of jobs which are
+This module defines the main entrypoint for any CI/CD process in cip - the pipeline. A pipeline is a collection of stages, groupings of jobs which are
 complex units of work that need to be performed as part of integration or deployment. The pipeline ensures that these jobs are all run in order based 
 on their dependencies and tracks their status.
 """
@@ -50,7 +50,7 @@ class BasePipeline:
         relevant.
 
         Args:
-            context(Dict): a doctionary containing useful metadata about the pipeline's execution status, it does not need to ordinarily 
+            context(Dict): a dictionary containing useful metadata about the pipeline's execution status, it does not need to ordinarily 
                 be supplied as the default empty dictionary will be populated accordingly though if any additional metadata needs to be
                 added it can be done here.
 
@@ -99,7 +99,7 @@ class ConcurrentPipeline(BasePipeline):
         Contexts are isolated per job so that no unpredicted behaviour should occur where two jobs race to modify a piece of metadata.
 
         Args:
-            context(Dict): a doctionary containing useful metadata about the pipeline's execution status, it does not need to ordinarily 
+            context(Dict): a dictionary containing useful metadata about the pipeline's execution status, it does not need to ordinarily 
                 be supplied as the default empty dictionary will be populated accordingly though if any additional metadata needs to be
                 added it can be done here. Copies of the context will be created each time a job runs to avoid race conditions and other
                 unexpected behviour.
