@@ -298,8 +298,7 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
         """
         self.shutdown.set()
 
-
-if __name__ == "__main__":
+def main():
     config = CipServerConfig()
 
     parser = argparse.ArgumentParser()
@@ -330,3 +329,7 @@ if __name__ == "__main__":
         workers=args.workers
     )
     pipeline_execution_daemon.start()
+
+
+if __name__ == "__main__":
+    main()
