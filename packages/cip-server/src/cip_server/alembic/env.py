@@ -1,5 +1,4 @@
 from logging.config import fileConfig
-import os
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -27,7 +26,9 @@ target_metadata = Base.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
-config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL"))
+from cip_server.config import CipServerConfig
+cip_config = CipServerConfig()
+config.set_main_option("sqlalchemy.url", cip_config.database.url())
 
 
 def run_migrations_offline() -> None:

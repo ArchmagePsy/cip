@@ -11,6 +11,7 @@ import uuid
 from concurrent.futures import CancelledError, Future, ProcessPoolExecutor
 from typing import Dict
 
+from cip_server.config import CipServerConfig
 import grpc
 from cip_core.pipelines import BasePipeline
 from cip_server.daemon import daemon_pb2_grpc
@@ -18,7 +19,7 @@ from cip_server.daemon.daemon_pb2 import PipelineExecutionResponse
 from cip_server.daemon.daemon_pb2_grpc import PipelineExecutorServicer
 from cip_server.models.pipelines import PipelineExecution, PipelineStatus
 from cip_server.models.results import JobResult
-from cip_server.utils.errors import CIPServerException
+from cip_server.utils.errors import CipServerException
 from git import Repo
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -53,7 +54,7 @@ def find_pipeline(project_path: os.PathLike, config_path: os.PathLike):
 
 def execute_pipeline(pipeline_id: uuid.UUID):
         if worker_session_factory is None: 
-            raise CIPServerException("No database session factory was found")
+            raise CipServerException("No database session factory was found")
         
         with worker_session_factory() as session:
 
@@ -70,7 +71,7 @@ def execute_pipeline(pipeline_id: uuid.UUID):
                     pipeline, context = find_pipeline(clone_repo.working_tree_dir, "cip.toml")
                     
                     if pipeline is None:
-                        raise CIPServerException(f"No pipeline found in {pipeline_execution.git_url} project")
+                        raise CipServerException(f"No pipeline found in {pipeline_execution.git_url} project")
                     
                     logger.debug(f"Switching to project directory {clone_repo.working_tree_dir}")
                     
@@ -207,18 +208,20 @@ class PipelineExecutionDaemon(PipelineExecutorServicer):
 
 
 if __name__ == "__main__":
+    config = CipServerConfig()
+
     parser = argparse.ArgumentParser()
     postgres_args = parser.add_argument_group("postgres")
-    postgres_args.add_argument("--postgres-host", type=str, default="127.0.0.1", help="The host for the postgres instance to connect to. Default is 127.0.0.1")
-    postgres_args.add_argument("--postgres-port", type=int, default=5432, help="The port that the postgres instance is listenning on. Default is 5432")
-    postgres_args.add_argument("--postgres-user", type=str, default="user", help="The postgres username for the daemon to connect as. Default is user")
-    postgres_args.add_argument("--postgres-password", type=str, default="password", help="The postgres password for the daemon to use. Default is password")
-    postgres_args.add_argument("--postgres-database", type=str, default="database", help="The name of the postgres database to connect to. Default is database")
+    postgres_args.add_argument("--postgres-host", type=str, default=config.database.host, help="The host for the postgres instance to connect to. Default is 127.0.0.1")
+    postgres_args.add_argument("--postgres-port", type=int, default=config.database.port, help="The port that the postgres instance is listenning on. Default is 5432")
+    postgres_args.add_argument("--postgres-user", type=str, default=config.database.username, help="The postgres username for the daemon to connect as")
+    postgres_args.add_argument("--postgres-password", type=str, default=config.database.password, help="The postgres password for the daemon to use")
+    postgres_args.add_argument("--postgres-database", type=str, default=config.database.name, help="The name of the postgres database to connect to")
 
     daemon_args = parser.add_argument_group("daemon")
-    daemon_args.add_argument("--host", type=str, default="127.0.0.1", help="The host address the daemon should listen on. Default is 127.0.0.1")
-    daemon_args.add_argument("--port", type=int, default=3916, help="The port the daemon should accept connections from other processes on. Default is 3916")
-    daemon_args.add_argument("--workers", type=int, default=4, help="The number of worker processes the daemon should use to run pipelines in parrallel. Default is 4")
+    daemon_args.add_argument("--host", type=str, default=config.daemon.host, help="The host address the daemon should listen on. Default is 127.0.0.1")
+    daemon_args.add_argument("--port", type=int, default=config.daemon.port, help="The port the daemon should accept connections from other processes on. Default is 3916")
+    daemon_args.add_argument("--workers", type=int, default=config.daemon.workers, help="The number of worker processes the daemon should use to run pipelines in parrallel. Default is 4")
     daemon_args.add_argument("--log-level", type=str, help="The logging level for the daemon. If not specified the root logger's default level will be used")
 
     args = parser.parse_args()

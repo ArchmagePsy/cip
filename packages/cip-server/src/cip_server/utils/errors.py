@@ -1,2 +1,2 @@
-class CIPServerException(Exception):
+class CipServerException(Exception):
     pass
