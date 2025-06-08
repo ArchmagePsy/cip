@@ -12,7 +12,7 @@ import pytest
 from cip_server.daemon import daemon_pb2_grpc
 from cip_server.daemon.daemon_pb2 import PipelineExecutionRequest
 from cip_server.daemon.daemon_pb2_grpc import PipelineExecutorStub
-from cip_server.daemon.main import PipelineExecutionDaemon, logger
+from cip_server.daemon.__main__ import PipelineExecutionDaemon, logger
 from cip_server.models.base import Base
 from cip_server.models.pipelines import PipelineExecution, PipelineStatus
 from git import Repo
@@ -32,12 +32,14 @@ def pipeline_database_engine(request):
 
     postgres.start()
 
+    engine = create_engine(postgres.get_connection_url())
+    
     def cleanup():
+        engine.dispose()
         postgres.stop()
 
     request.addfinalizer(cleanup)
-
-    engine = create_engine(postgres.get_connection_url())
+    
     Base.metadata.create_all(engine)
 
     return engine

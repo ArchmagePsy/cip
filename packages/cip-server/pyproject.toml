@@ -37,5 +37,6 @@ dev = [
     "fastapi[standard]>=0.115.12",
     "grpcio-tools>=1.71.0",
     "pytest>=8.3.5",
+    "pytest-asyncio>=1.0.0",
     "testcontainers>=4.10.0",
 ]
