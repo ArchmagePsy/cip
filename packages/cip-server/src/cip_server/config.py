@@ -34,3 +34,12 @@ class CipServerConfig(BaseSettings):
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
         TomlConfigSettingsSource
         return init_settings, env_settings, dotenv_settings, TomlConfigSettingsSource(settings_cls), file_secret_settings
+    
+_config = None
+
+def get_config():
+    global _config
+    if _config is None:
+        _config = CipServerConfig()
+    else:
+        return _config
