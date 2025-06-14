@@ -11,6 +11,7 @@ def get_engine():
     global _engine
     if _engine is None:
         _engine = create_async_engine(get_config().database.url(async_db=True))
+        return _engine
     else:
         return _engine
 
@@ -18,6 +19,7 @@ def get_session_factory():
     global _session_factory
     if _session_factory is None:
         _session_factory = sessionmaker(get_engine(), class_=AsyncSession)
+        return _session_factory
     else:
         return _session_factory
 
