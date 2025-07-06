@@ -78,49 +78,49 @@ def find_pipeline(project_path: os.PathLike, config_path: os.PathLike):
     return pipeline, context
 
 def execute_pipeline(pipeline_id: uuid.UUID):
-        """
-        Execute a pipeline.
+    """
+    Execute a pipeline.
 
-        This method is run by the worker processes and is responsible for creating a temporary directory to checkout the project to
-        then finding its pipeline and executing it all while updating its entry in the database.
+    This method is run by the worker processes and is responsible for creating a temporary directory to checkout the project to
+    then finding its pipeline and executing it all while updating its entry in the database.
 
-        Args:
-            pipeline_id(UUID): the id of the pipeline execution to process, the worker expects that this will already have been created
-        
-        Returns:
-            Dict[str, bool]: the results of the pipeline where each key is a job name and the value is True or False for pass or fail
-        """
-        if worker_session_factory is None: 
-            raise CipServerException("No database session factory was found")
-        
-        with worker_session_factory() as session:
+    Args:
+        pipeline_id(UUID): the id of the pipeline execution to process, the worker expects that this will already have been created
+    
+    Returns:
+        Dict[str, bool]: the results of the pipeline where each key is a job name and the value is True or False for pass or fail
+    """
+    if worker_session_factory is None: 
+        raise CipServerException("No database session factory was found")
+    
+    with worker_session_factory() as session:
 
-            pipeline_execution = session.get(PipelineExecution, pipeline_id)
+        pipeline_execution = session.get(PipelineExecution, pipeline_id)
 
-            with tempfile.TemporaryDirectory(prefix="pipeline_", suffix=f"_{pipeline_execution.commit_hash}") as pipeline_temp_dir:
-                checkpoint_cwd = os.getcwd()
-                clone_repo = None
-                try:
-                    logger.debug(f"Temporary directory {pipeline_temp_dir} created")
-                    logger.info("Checking out project")
-                    clone_repo = checkout_project(pipeline_execution.git_url, pipeline_execution.commit_hash, pipeline_temp_dir)
-                    logger.info("Looking for pipeline")
-                    pipeline, context = find_pipeline(clone_repo.working_tree_dir, "cip.toml")
-                    
-                    if pipeline is None:
-                        raise CipServerException(f"No pipeline found in {pipeline_execution.git_url} project")
-                    
-                    logger.debug(f"Switching to project directory {clone_repo.working_tree_dir}")
-                    
-                    os.chdir(clone_repo.working_tree_dir)
-                    update_pipeline_status(session, pipeline_execution, PipelineStatus.RUNNING)
-                    logger.info("Executing pipeline")
-                    pipeline_results = {job.name: result for job, result in pipeline.run(context).items()}
-                    return pipeline_results
-                finally:
-                    os.chdir(checkpoint_cwd)
-                    if clone_repo is not None:
-                        clone_repo.close()
+        with tempfile.TemporaryDirectory(prefix="pipeline_", suffix=f"_{pipeline_execution.commit_hash}") as pipeline_temp_dir:
+            checkpoint_cwd = os.getcwd()
+            clone_repo = None
+            try:
+                logger.debug(f"Temporary directory {pipeline_temp_dir} created")
+                logger.info("Checking out project")
+                clone_repo = checkout_project(pipeline_execution.git_url, pipeline_execution.commit_hash, pipeline_temp_dir)
+                logger.info("Looking for pipeline")
+                pipeline, context = find_pipeline(clone_repo.working_tree_dir, "cip.toml")
+                
+                if pipeline is None:
+                    raise CipServerException(f"No pipeline found in {pipeline_execution.git_url} project")
+                
+                logger.debug(f"Switching to project directory {clone_repo.working_tree_dir}")
+                
+                os.chdir(clone_repo.working_tree_dir)
+                update_pipeline_status(session, pipeline_execution, PipelineStatus.RUNNING)
+                logger.info("Executing pipeline")
+                pipeline_results = {job.name: result for job, result in pipeline.run(context).items()}
+                return pipeline_results
+            finally:
+                os.chdir(checkpoint_cwd)
+                if clone_repo is not None:
+                    clone_repo.close()
 
 def init_worker(connection_url: str):
     """
