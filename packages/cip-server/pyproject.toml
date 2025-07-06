@@ -1,7 +1,7 @@
 [project]
 name = "cip-server"
 version = "0.1.0"
-description = "Add your description here"
+description = "The cip server, consisting of the API and the daemon"
 readme = "README.md"
 authors = [
     { name = "ArchmagePsy", email = "SeaOfCodeSi@gmail.com" }

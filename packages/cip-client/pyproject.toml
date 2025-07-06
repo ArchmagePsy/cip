@@ -1,7 +1,7 @@
 [project]
 name = "cip-client"
 version = "0.1.0"
-description = "Add your description here"
+description = "A simple CLI for cip"
 readme = "README.md"
 authors = [
     { name = "ArchmagePsy", email = "SeaOfCodeSi@gmail.com" }

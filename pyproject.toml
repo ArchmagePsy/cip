@@ -1,7 +1,7 @@
 [project]
 name = "cip"
 version = "0.1.0"
-description = "Add your description here"
+description = "cip is a package for writing CI/CD scripts in python"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []

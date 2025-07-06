@@ -1,7 +1,7 @@
 [project]
 name = "cip-core"
 version = "0.1.0"
-description = "Add your description here"
+description = "The core cip features such as the DSL"
 readme = "README.md"
 authors = [
     { name = "ArchmagePsy", email = "SeaOfCodeSi@gmail.com" }

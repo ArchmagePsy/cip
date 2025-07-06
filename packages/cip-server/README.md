@@ -1,0 +1,1 @@
+The cip server uses a REST API to retrieve pipeline execution details and submit requests to the pipeline execution daemon, a gRPC server responsible for running the pipelines. Postgres is the database of choice for storing pipeline execution information.

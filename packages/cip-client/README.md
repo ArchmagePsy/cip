@@ -1,0 +1,1 @@
+A simple command line interface to setup cip on a git server or local repository.

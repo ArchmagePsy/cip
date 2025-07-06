@@ -1,0 +1,1 @@
+This package contains the core components of cip, its DSL.
